@@ -1,0 +1,11 @@
+{
+  "name": "customer-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "echo \"Install Expo/React Native dependencies before running\"",
+    "lint": "echo \"Configure linter\"",
+    "test": "echo \"Configure tests\""
+  }
+}
+

@@ -1,0 +1,3 @@
+rootProject.name = "foodtruck-platform"
+include("apps:api")
+
