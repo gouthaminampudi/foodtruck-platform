@@ -1,6 +1,6 @@
-# Food Truck Platform
+# FoodTruck
 
-Monorepo scaffold for the food truck platform.
+Monorepo scaffold for the FoodTruck platform.
 
 ## Phase 0 Scope
 
