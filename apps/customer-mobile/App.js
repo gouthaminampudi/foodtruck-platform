@@ -1,6 +1,8 @@
 import { StatusBar } from "expo-status-bar";
-import React from "react";
+import * as Location from "expo-location";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -38,7 +40,155 @@ const trucks = [
   }
 ];
 
+function formatCoordinates(coords) {
+  if (!coords) {
+    return "Location unavailable";
+  }
+
+  return `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`;
+}
+
+function formatPlace(geocode, coords) {
+  if (geocode) {
+    const parts = [
+      geocode.name,
+      geocode.street,
+      geocode.district,
+      geocode.city,
+      geocode.region
+    ].filter(Boolean);
+
+    if (parts.length > 0) {
+      return parts.slice(0, 2).join(", ");
+    }
+  }
+
+  return `Current area · ${formatCoordinates(coords)}`;
+}
+
 export default function App() {
+  const [coords, setCoords] = useState(null);
+  const [placeLabel, setPlaceLabel] = useState("Locating you...");
+  const [coordinateLabel, setCoordinateLabel] = useState("Waiting for GPS fix");
+  const [locationMeta, setLocationMeta] = useState("Requesting location permission");
+
+  useEffect(() => {
+    let active = true;
+    let browserWatchId = null;
+
+    async function resolvePlace(nextCoords, sourceLabel) {
+      if (!active) {
+        return;
+      }
+
+      setCoords(nextCoords);
+      setCoordinateLabel(formatCoordinates(nextCoords));
+      setLocationMeta(sourceLabel);
+      setPlaceLabel("Resolving address...");
+
+      try {
+        const [geocode] = await Location.reverseGeocodeAsync({
+          latitude: nextCoords.latitude,
+          longitude: nextCoords.longitude
+        });
+
+        if (!active) {
+          return;
+        }
+
+        setPlaceLabel(formatPlace(geocode, nextCoords));
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setPlaceLabel(`Current area · ${formatCoordinates(nextCoords)}`);
+      }
+    }
+
+    function loadBrowserLocation() {
+      if (!navigator.geolocation) {
+        setPlaceLabel("Location unavailable");
+        setCoordinateLabel("No coordinate data available");
+        setLocationMeta("Browser geolocation is not supported");
+        return;
+      }
+
+      browserWatchId = navigator.geolocation.watchPosition(
+        (position) => {
+          resolvePlace(position.coords, "Browser GPS live");
+        },
+        () => {
+          if (!active) {
+            return;
+          }
+
+          setPlaceLabel("Location permission needed");
+          setCoordinateLabel("Enable browser location access");
+          setLocationMeta("Allow browser location access to show nearby trucks accurately");
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 10000
+        }
+      );
+    }
+
+    async function loadLocation() {
+      if (Platform.OS === "web") {
+        loadBrowserLocation();
+        return;
+      }
+
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+
+        if (!active) {
+          return;
+        }
+
+        if (permission.status !== "granted") {
+          setPlaceLabel("Location permission needed");
+          setCoordinateLabel("Enable device location access");
+          setLocationMeta("Enable location access to show nearby trucks accurately");
+          return;
+        }
+
+        const currentPosition = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Highest
+        });
+
+        resolvePlace(currentPosition.coords, "GPS live");
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setPlaceLabel("Location unavailable");
+        setCoordinateLabel("Could not determine coordinates");
+        setLocationMeta("Could not determine your current location");
+      }
+    }
+
+    loadLocation();
+
+    return () => {
+      active = false;
+      if (browserWatchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(browserWatchId);
+      }
+    };
+  }, []);
+
+  const locationSummary = useMemo(() => {
+    if (!coords) {
+      return "Showing truck preview data until live location is available";
+    }
+
+    return `Showing online trucks near ${placeLabel} · ${coordinateLabel}`;
+  }, [coords, placeLabel, coordinateLabel]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
@@ -50,6 +200,18 @@ export default function App() {
             Live map discovery with online trucks matched to your cuisine
             preferences.
           </Text>
+        </View>
+
+        <View style={styles.locationCard}>
+          <View style={styles.locationIconWrap}>
+            <Text style={styles.locationIcon}>◎</Text>
+          </View>
+          <View style={styles.locationBody}>
+            <Text style={styles.locationLabel}>Current location</Text>
+            <Text style={styles.locationValue}>{placeLabel}</Text>
+            <Text style={styles.coordinateValue}>{coordinateLabel}</Text>
+            <Text style={styles.locationMeta}>{locationMeta}</Text>
+          </View>
         </View>
 
         <View style={styles.mapCard}>
@@ -72,6 +234,9 @@ export default function App() {
             <View style={[styles.marker, styles.markerThree]}>
               <Text style={styles.markerText}>G</Text>
             </View>
+            <View style={styles.userLocationLabel}>
+              <Text style={styles.userLocationLabelText}>{placeLabel}</Text>
+            </View>
             <View style={styles.userDot}>
               <View style={styles.userPulse} />
               <View style={styles.userCore} />
@@ -79,10 +244,7 @@ export default function App() {
           </View>
 
           <View style={styles.mapFooter}>
-            <Text style={styles.mapFooterText}>
-              Showing online trucks based on your saved cuisines: Mexican,
-              Indian, Vegan
-            </Text>
+            <Text style={styles.mapFooterText}>{locationSummary}</Text>
           </View>
         </View>
 
@@ -145,161 +307,221 @@ const styles = StyleSheet.create({
     color: "#1f1d1a",
     fontSize: 34,
     fontWeight: "800",
-    lineHeight: 38
+    lineHeight: 40,
+    marginBottom: 8
   },
   subtitle: {
-    color: "#5c554a",
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 10,
-    maxWidth: 480
+    color: "#5b554b",
+    fontSize: 16,
+    lineHeight: 24
+  },
+  locationCard: {
+    backgroundColor: "#fffaf2",
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#eadfca"
+  },
+  locationIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#f6dcc4",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14
+  },
+  locationIcon: {
+    color: "#8f3a21",
+    fontSize: 20,
+    fontWeight: "700"
+  },
+  locationBody: {
+    flex: 1
+  },
+  locationLabel: {
+    color: "#8b8375",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1
+  },
+  locationValue: {
+    color: "#1f1d1a",
+    fontSize: 18,
+    fontWeight: "800",
+    marginTop: 4
+  },
+  coordinateValue: {
+    color: "#514a41",
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 6
+  },
+  locationMeta: {
+    color: "#6c655c",
+    fontSize: 13,
+    marginTop: 4
   },
   mapCard: {
-    backgroundColor: "#fffaf1",
-    borderRadius: 24,
-    padding: 16,
+    backgroundColor: "#132a32",
+    borderRadius: 30,
+    padding: 18,
     marginBottom: 22,
-    borderWidth: 1,
-    borderColor: "#eadbc1",
-    shadowColor: "#6e4f22",
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4
+    overflow: "hidden"
   },
   mapHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 14
+    marginBottom: 16
   },
   sectionTitle: {
-    color: "#1f1d1a",
+    color: "#f9f4ea",
     fontSize: 20,
     fontWeight: "800"
   },
   liveBadge: {
-    backgroundColor: "#163d33",
-    borderRadius: 999,
     paddingHorizontal: 10,
-    paddingVertical: 6
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#d6532f"
   },
   liveBadgeText: {
-    color: "#f5efe3",
+    color: "#fff7ee",
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 1
   },
   mapCanvas: {
-    position: "relative",
     height: 280,
-    backgroundColor: "#d7eadf",
-    borderRadius: 20,
+    borderRadius: 24,
+    backgroundColor: "#20505d",
+    position: "relative",
     overflow: "hidden"
   },
   route: {
     position: "absolute",
-    backgroundColor: "#f3e6ce",
+    backgroundColor: "rgba(255,255,255,0.14)",
     borderRadius: 999
   },
   routeOne: {
-    width: 320,
-    height: 20,
-    top: 62,
-    left: -12,
+    width: 260,
+    height: 12,
+    top: 90,
+    left: -24,
     transform: [{ rotate: "18deg" }]
   },
   routeTwo: {
-    width: 290,
-    height: 18,
-    top: 162,
-    left: 36,
-    transform: [{ rotate: "-14deg" }]
+    width: 240,
+    height: 10,
+    bottom: 88,
+    right: -18,
+    transform: [{ rotate: "-22deg" }]
   },
   marker: {
     position: "absolute",
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#c84f2d",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#f7b24d",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
-    borderColor: "#fff7ea"
+    borderColor: "#fff6e8"
   },
   markerOne: {
-    top: 48,
-    left: 52
+    top: 56,
+    right: 62
   },
   markerTwo: {
-    top: 112,
-    right: 58
+    bottom: 72,
+    left: 56,
+    backgroundColor: "#ff8966"
   },
   markerThree: {
-    bottom: 40,
-    left: 118
+    top: 136,
+    left: 142,
+    backgroundColor: "#84d2c5"
   },
   markerText: {
-    color: "#fffaf1",
-    fontWeight: "900",
-    fontSize: 17
+    color: "#18323b",
+    fontWeight: "900"
+  },
+  userLocationLabel: {
+    position: "absolute",
+    top: 172,
+    left: 98,
+    backgroundColor: "rgba(255, 250, 242, 0.92)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    maxWidth: 180
+  },
+  userLocationLabelText: {
+    color: "#204654",
+    fontSize: 12,
+    fontWeight: "700"
   },
   userDot: {
     position: "absolute",
-    bottom: 84,
-    right: 92,
-    width: 32,
-    height: 32,
+    top: 212,
+    left: 124,
+    width: 24,
+    height: 24,
     alignItems: "center",
     justifyContent: "center"
   },
   userPulse: {
     position: "absolute",
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(34, 94, 168, 0.24)"
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 231, 179, 0.45)"
   },
   userCore: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#225ea8",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#ffe7b3",
     borderWidth: 2,
-    borderColor: "#ffffff"
+    borderColor: "#fff"
   },
   mapFooter: {
     marginTop: 14
   },
   mapFooterText: {
-    color: "#4f4a42",
+    color: "#c6dfde",
     fontSize: 13,
-    lineHeight: 19
+    lineHeight: 18
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-end",
-    marginBottom: 12
+    alignItems: "center",
+    marginBottom: 14
   },
   sectionMeta: {
-    color: "#6a6257",
+    color: "#7d7264",
     fontSize: 13,
-    fontWeight: "600"
+    fontWeight: "700"
   },
   truckCard: {
-    backgroundColor: "#fffaf1",
-    borderRadius: 20,
-    padding: 16,
+    backgroundColor: "#fffaf2",
+    borderRadius: 22,
+    padding: 18,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: "#eadbc1"
+    borderColor: "#eadfca"
   },
   truckTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 12
+    marginBottom: 14
   },
   truckName: {
     color: "#1f1d1a",
@@ -307,35 +529,34 @@ const styles = StyleSheet.create({
     fontWeight: "800"
   },
   truckCuisine: {
-    color: "#8f3a21",
-    fontSize: 13,
-    fontWeight: "700",
+    color: "#8b8375",
+    fontSize: 14,
     marginTop: 4
   },
   ratingPill: {
-    backgroundColor: "#163d33",
+    backgroundColor: "#f7b24d",
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 7
+    paddingHorizontal: 12,
+    paddingVertical: 8
   },
   ratingText: {
-    color: "#fffaf1",
-    fontSize: 12,
-    fontWeight: "800"
+    color: "#503400",
+    fontWeight: "900"
   },
   infoRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8
+    flexWrap: "wrap"
   },
   infoChip: {
-    backgroundColor: "#f2e7d1",
+    backgroundColor: "#efe4d3",
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 8
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    marginBottom: 8
   },
   infoChipText: {
-    color: "#4e473e",
+    color: "#5b554b",
     fontSize: 12,
     fontWeight: "700"
   }
