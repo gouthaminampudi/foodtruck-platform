@@ -1,6 +1,7 @@
 import { StatusBar } from "expo-status-bar";
 import * as Location from "expo-location";
 import React, { useEffect, useMemo, useState } from "react";
+import CustomerMap from "./src/components/CustomerMap";
 import {
   Platform,
   SafeAreaView,
@@ -40,6 +41,17 @@ const trucks = [
   }
 ];
 
+const fallbackCoords = {
+  latitude: 41.8781,
+  longitude: -87.6298
+};
+
+const truckOffsets = [
+  { latitude: 0.0064, longitude: -0.0042, pinColor: "#d6532f" },
+  { latitude: -0.0048, longitude: 0.0071, pinColor: "#f7b24d" },
+  { latitude: 0.0032, longitude: 0.0039, pinColor: "#3e9c8f" }
+];
+
 function formatCoordinates(coords) {
   if (!coords) {
     return "Location unavailable";
@@ -64,6 +76,19 @@ function formatPlace(geocode, coords) {
   }
 
   return `Current area · ${formatCoordinates(coords)}`;
+}
+
+function buildTruckMarkers(centerCoords) {
+  return trucks.map((truck, index) => {
+    const offset = truckOffsets[index] ?? truckOffsets[0];
+
+    return {
+      ...truck,
+      latitude: centerCoords.latitude + offset.latitude,
+      longitude: centerCoords.longitude + offset.longitude,
+      pinColor: offset.pinColor
+    };
+  });
 }
 
 export default function App() {
@@ -189,10 +214,30 @@ export default function App() {
     return `Showing online trucks near ${placeLabel} · ${coordinateLabel}`;
   }, [coords, placeLabel, coordinateLabel]);
 
+  const mapRegion = useMemo(
+    () => ({
+      latitude: coords?.latitude ?? fallbackCoords.latitude,
+      longitude: coords?.longitude ?? fallbackCoords.longitude,
+      latitudeDelta: 0.03,
+      longitudeDelta: 0.03
+    }),
+    [coords]
+  );
+
+  const nearbyTruckMarkers = useMemo(
+    () => buildTruckMarkers(coords ?? fallbackCoords),
+    [coords]
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="automatic"
+      >
         <View style={styles.hero}>
           <Text style={styles.eyebrow}>Customer Home</Text>
           <Text style={styles.title}>Find food trucks near you</Text>
@@ -223,24 +268,11 @@ export default function App() {
           </View>
 
           <View style={styles.mapCanvas}>
-            <View style={[styles.route, styles.routeOne]} />
-            <View style={[styles.route, styles.routeTwo]} />
-            <View style={[styles.marker, styles.markerOne]}>
-              <Text style={styles.markerText}>T</Text>
-            </View>
-            <View style={[styles.marker, styles.markerTwo]}>
-              <Text style={styles.markerText}>C</Text>
-            </View>
-            <View style={[styles.marker, styles.markerThree]}>
-              <Text style={styles.markerText}>G</Text>
-            </View>
-            <View style={styles.userLocationLabel}>
-              <Text style={styles.userLocationLabelText}>{placeLabel}</Text>
-            </View>
-            <View style={styles.userDot}>
-              <View style={styles.userPulse} />
-              <View style={styles.userCore} />
-            </View>
+            <CustomerMap
+              mapRegion={mapRegion}
+              nearbyTruckMarkers={nearbyTruckMarkers}
+              placeLabel={placeLabel}
+            />
           </View>
 
           <View style={styles.mapFooter}>
@@ -287,6 +319,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: "#f5efe3"
+  },
+  scrollView: {
+    flex: 1
   },
   container: {
     padding: 20,
@@ -402,93 +437,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#20505d",
     position: "relative",
     overflow: "hidden"
-  },
-  route: {
-    position: "absolute",
-    backgroundColor: "rgba(255,255,255,0.14)",
-    borderRadius: 999
-  },
-  routeOne: {
-    width: 260,
-    height: 12,
-    top: 90,
-    left: -24,
-    transform: [{ rotate: "18deg" }]
-  },
-  routeTwo: {
-    width: 240,
-    height: 10,
-    bottom: 88,
-    right: -18,
-    transform: [{ rotate: "-22deg" }]
-  },
-  marker: {
-    position: "absolute",
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#f7b24d",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "#fff6e8"
-  },
-  markerOne: {
-    top: 56,
-    right: 62
-  },
-  markerTwo: {
-    bottom: 72,
-    left: 56,
-    backgroundColor: "#ff8966"
-  },
-  markerThree: {
-    top: 136,
-    left: 142,
-    backgroundColor: "#84d2c5"
-  },
-  markerText: {
-    color: "#18323b",
-    fontWeight: "900"
-  },
-  userLocationLabel: {
-    position: "absolute",
-    top: 172,
-    left: 98,
-    backgroundColor: "rgba(255, 250, 242, 0.92)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
-    maxWidth: 180
-  },
-  userLocationLabelText: {
-    color: "#204654",
-    fontSize: 12,
-    fontWeight: "700"
-  },
-  userDot: {
-    position: "absolute",
-    top: 212,
-    left: 124,
-    width: 24,
-    height: 24,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  userPulse: {
-    position: "absolute",
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 231, 179, 0.45)"
-  },
-  userCore: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#ffe7b3",
-    borderWidth: 2,
-    borderColor: "#fff"
   },
   mapFooter: {
     marginTop: 14
