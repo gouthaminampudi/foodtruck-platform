@@ -1,34 +1,12 @@
 # Operator Mobile App
 
-Scaffold for the operator-facing mobile application used by truck owners and
-staff.
+Expo-based operator console for truck and operator-management CRUD.
 
-## Planned Scope
+## Current Scope
 
-The operator app is intended to support:
-
-- Auth
-- Truck setup
-- Menu management
-- Order dashboard
-- Queue management
-- Settings
-
-Related platform requirements also point to operator-facing workflows such as:
-
-- Truck registration
-- Menu management
-- Social publishing
-
-## Current Status
-
-This app is not implemented as a runnable Expo app yet.
-
-The current `package.json` contains placeholder scripts only:
-
-- `npm start` prints a placeholder message
-- `npm lint` prints a placeholder message
-- `npm test` prints a placeholder message
+- Truck profile CRUD (`/api/v1/trucks`)
+- Truck operator assignment CRUD (`/api/v1/truck-operators`)
+- Optional actor header support (`X-Actor-User-Id`) for role-based authz
 
 ## Install
 
@@ -40,14 +18,12 @@ npm install
 ## Run
 
 ```bash
+cd apps/operator-mobile
 npm start
 ```
 
-Expected current behavior:
+You can override the API URL with:
 
-```text
-Install Expo/React Native dependencies before running
+```bash
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm start
 ```
-
-Before this app can run as a real mobile client, Expo and React Native
-dependencies still need to be added and the app entry points need to be built.

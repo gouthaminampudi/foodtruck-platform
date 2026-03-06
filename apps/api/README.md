@@ -11,6 +11,11 @@ The API currently provides the backend foundation for:
 - Flyway database migrations
 - Health endpoint at `/api/v1/health`
 - Base security and application configuration
+- Truck core CRUD APIs (`truck_profile`, `truck_location`, `menu_item`)
+- Customer CRUD APIs (`customer_profile` + `app_user`)
+- Truck owner profile and operator-role assignments
+- Swagger/OpenAPI docs
+- CORS enabled for browser/mobile clients
 
 Planned modules in this app include:
 
@@ -50,6 +55,12 @@ Default local values:
 
 ## Run
 
+Optional setup helper from repo root:
+
+```bash
+source scripts/dev-java21.sh
+```
+
 ```bash
 cd apps/api
 gradle bootRun
@@ -72,3 +83,37 @@ Expected response:
 ```json
 {"status":"ok"}
 ```
+
+## Truck Operator Roles
+
+The schema supports one owner and multiple operators per truck:
+
+- `truck_owner_profile` stores owner business profile
+- `truck_profile.owner_user_id` links each truck to its owner
+- `truck_operator_assignment` stores active operators per truck and role (`CHEF`, `CASHIER`, `DRIVER`)
+
+Role-based write authorization is available through:
+
+- Property: `app.authz.enforce-operator-permissions` (default `false`)
+- Request header when enabled: `X-Actor-User-Id: <app_user_uuid>`
+
+Current write permissions:
+
+- Owner: full truck/menu/location/operator management
+- Chef: menu write operations
+- Driver: location write operations
+- Cashier: reserved for order/payment flows (not wired yet in current module)
+
+## Endpoints
+
+- `GET /api/v1/health`
+- `GET/POST/PUT/DELETE /api/v1/customers`
+- `GET/POST/PUT/DELETE /api/v1/trucks`
+- `GET/POST/PUT/DELETE /api/v1/truck-locations`
+- `GET/POST/PUT/DELETE /api/v1/menu-items`
+- `GET/POST/PUT/DELETE /api/v1/truck-operators`
+
+## API Docs
+
+- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`

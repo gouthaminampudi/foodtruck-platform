@@ -12,6 +12,7 @@ The current app includes:
 - Google Maps on iOS and Android native builds
 - A web fallback view for the map section
 - Preview truck cards for nearby/recommended trucks
+- Customer CRUD UI (`/api/v1/customers`)
 
 The broader planned customer experience includes:
 
@@ -47,6 +48,7 @@ Set:
 
 ```bash
 GOOGLE_MAPS_API_KEY=your-google-maps-api-key
+EXPO_PUBLIC_API_URL=http://localhost:8080
 ```
 
 This key is required for the native Google map experience on iOS and Android.

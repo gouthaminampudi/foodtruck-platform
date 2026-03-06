@@ -40,7 +40,7 @@ Representative ClickUp requirements used for this summary:
 apps/
   api/               Spring Boot backend
   customer-mobile/   Expo customer application
-  operator-mobile/   Expo operator application scaffold
+  operator-mobile/   Expo operator application
 packages/
   shared-types/      Shared TypeScript package
 docs/
@@ -96,6 +96,7 @@ cp apps/customer-mobile/.env.example apps/customer-mobile/.env
 
 Set `GOOGLE_MAPS_API_KEY` in `apps/customer-mobile/.env` before running the
 native customer map.
+Set `EXPO_PUBLIC_API_URL` when the API is not on the same host as the app.
 
 ### 2. Start Postgres
 
@@ -155,6 +156,12 @@ different Node version, run commands with:
 export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
 ```
 
+For Java 21 + Gradle environment setup in this repo, you can source:
+
+```bash
+source scripts/dev-java21.sh
+```
+
 ## Running the Customer App
 
 ### Web
@@ -208,20 +215,67 @@ npm run android
 
 ## Running the Operator App
 
-The operator app is still scaffold-level and is not runnable as a real Expo app
-yet. At the moment, its package only contains placeholder scripts.
+The operator app is runnable and includes CRUD screens for truck profiles and
+truck operator assignments.
 
 ```bash
 cd apps/operator-mobile
 npm install
-npm start
+export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web
 ```
 
-Current behavior:
+Open:
 
-- `npm start` prints a placeholder message
-- Expo and React Native dependencies still need to be added before operator app
-  development can start
+```text
+http://localhost:8082
+```
+
+For iOS / Android:
+
+```bash
+cd apps/operator-mobile
+export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm run ios
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm run android
+```
+
+## Implemented API Functionality
+
+- Health endpoint: `GET /api/v1/health`
+- Customer CRUD: `GET/POST/PUT/DELETE /api/v1/customers`
+- Truck profile CRUD: `GET/POST/PUT/DELETE /api/v1/trucks`
+- Truck location CRUD: `GET/POST/PUT/DELETE /api/v1/truck-locations`
+- Menu item CRUD: `GET/POST/PUT/DELETE /api/v1/menu-items`
+- Truck operator assignment CRUD: `GET/POST/PUT/DELETE /api/v1/truck-operators`
+- Flyway migrations through `V5`
+- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
+- OpenAPI docs: `http://localhost:8080/v3/api-docs`
+- CORS support for browser/mobile preflight requests
+- Optional role-based write authorization for truck actions via
+  `app.authz.enforce-operator-permissions` and `X-Actor-User-Id`
+
+## Implemented UI Functionality
+
+- `apps/customer-mobile`
+  - Map-first customer home
+  - Live location and reverse geocoding
+  - Customer CRUD UI with success/failure notifications, list refresh, and
+    field reset on create
+- `apps/operator-mobile`
+  - Truck profile CRUD UI
+  - Truck operator assignment CRUD UI
+  - Optional actor header input (`X-Actor-User-Id`) for authz checks
+
+## Database Model Implemented
+
+- `app_user`
+- `customer_profile`
+- `truck_owner_profile`
+- `truck_profile`
+- `truck_location`
+- `menu_item`
+- `truck_operator_assignment`
 
 ## Common Issues
 
@@ -261,9 +315,9 @@ renders a non-native fallback instead of the full native map implementation.
 
 ## Current App Status
 
-- `apps/api`: running Spring Boot API with health endpoint and Flyway-backed
-  PostgreSQL configuration
-- `apps/customer-mobile`: working Expo app with live location handling and
-  Google Maps on native builds
-- `apps/operator-mobile`: scaffold with package setup and screen plan, but no
-  implemented runtime features yet
+- `apps/api`: running Spring Boot API with Flyway-managed PostgreSQL schema and
+  customer/truck domain CRUD endpoints
+- `apps/customer-mobile`: working Expo app with live location, Google Maps on
+  native, and customer CRUD UI
+- `apps/operator-mobile`: working Expo app with truck and operator assignment
+  CRUD UI
