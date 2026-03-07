@@ -26,6 +26,32 @@ The platform is designed to solve three connected workflows:
    - Search/create/update/manage truck lifecycle
    - Keep admin workflows isolated from customer/operator apps
 
+## ClickUp Product Scope
+
+The application roadmap and feature scope are organized in ClickUp lists.  
+Current implementation aligns primarily with Customer, Onboarding, Discovery, and Platform security foundations.
+
+- Customer Mobile App:
+  - [Customer Mobile App List](https://app.clickup.com/9017943503/v/l/901711268901) (`901711268901`)
+- Ordering & Payments:
+  - [Ordering & Payments List](https://app.clickup.com/9017943503/v/l/901711268902) (`901711268902`)
+- Platform Foundation:
+  - [Platform Foundation List](https://app.clickup.com/9017943503/v/l/901711268904) (`901711268904`)
+- Location & Discovery:
+  - [Location & Discovery List](https://app.clickup.com/9017943503/v/l/901711268905) (`901711268905`)
+- Food Truck Onboarding:
+  - [Food Truck Onboarding List](https://app.clickup.com/9017943503/v/l/901711268906) (`901711268906`)
+- Notifications:
+  - [Notifications List](https://app.clickup.com/9017943503/v/l/901711268899) (`901711268899`)
+
+Representative delivered items reflected in code include:
+
+- Separate customer/operator/admin apps and role boundaries
+- Customer map + nearby truck discovery + profile self-service
+- Operator self-profile + assigned truck operations
+- Admin-only customer and truck management screens/APIs
+- Role-protected backend endpoints and auth flows
+
 ## Repository Structure
 
 ```text
