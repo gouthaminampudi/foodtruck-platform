@@ -69,6 +69,7 @@ public class TruckProfileService {
         truckProfile.setServiceRadiusMeters(request.serviceRadiusMeters() != null ? request.serviceRadiusMeters() : 5000);
         truckProfile.setIsVerified(request.isVerified() != null ? request.isVerified() : false);
         truckProfile.setIsOnline(request.isOnline() != null ? request.isOnline() : false);
+        truckProfile.setIsActive(request.isActive() != null ? request.isActive() : true);
     }
 
     private TruckProfileResponse toResponse(TruckProfile truckProfile) {
@@ -86,6 +87,7 @@ public class TruckProfileService {
             truckProfile.getServiceRadiusMeters(),
             truckProfile.getIsVerified(),
             truckProfile.getIsOnline(),
+            truckProfile.getIsActive(),
             truckProfile.getCreatedAt(),
             truckProfile.getUpdatedAt()
         );

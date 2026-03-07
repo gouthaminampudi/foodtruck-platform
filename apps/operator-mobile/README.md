@@ -1,29 +1,31 @@
 # Operator Mobile App
 
-Expo-based operator console for truck and operator-management CRUD.
+Standalone operator app.
 
-## Current Scope
+## Screen Flow
 
-- Truck profile CRUD (`/api/v1/trucks`)
-- Truck operator assignment CRUD (`/api/v1/truck-operators`)
-- Optional actor header support (`X-Actor-User-Id`) for role-based authz
+- `/` + `/signin` + `/signup`
+- `/home` (operator dashboard)
+- `/profile`
+- `/profile/edit`
+- `/truck`
+- `/truck/edit`
 
-## Install
+## Features
 
-```bash
-cd apps/operator-mobile
-npm install
-```
+- Operator sign up / sign in
+- Profile icon menu (view profile, edit profile, logout)
+- Operator-only profile update
+- Operator-only own truck detail/update
+- Truck location/status update
+- Success/failure notifications
+- Empty state when no truck is assigned to operator
+- `Back to Home` navigation from sub-pages
 
 ## Run
 
 ```bash
 cd apps/operator-mobile
-npm start
-```
-
-You can override the API URL with:
-
-```bash
-EXPO_PUBLIC_API_URL=http://localhost:8080 npm start
+npm install
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web -- --port 8082
 ```

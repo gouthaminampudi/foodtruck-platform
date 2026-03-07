@@ -29,6 +29,9 @@ public class CustomerProfile {
     @Column(name = "preferred_cuisines")
     private String preferredCuisines;
 
+    @Column(name = "profile_image_url")
+    private String profileImageUrl;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -87,6 +90,14 @@ public class CustomerProfile {
 
     public void setPreferredCuisines(String preferredCuisines) {
         this.preferredCuisines = preferredCuisines;
+    }
+
+    public String getProfileImageUrl() {
+        return profileImageUrl;
+    }
+
+    public void setProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -19,6 +19,7 @@ public record TruckProfileResponse(
     Integer serviceRadiusMeters,
     Boolean isVerified,
     Boolean isOnline,
+    Boolean isActive,
     LocalDateTime createdAt,
     LocalDateTime updatedAt
 ) {

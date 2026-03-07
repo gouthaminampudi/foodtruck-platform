@@ -1,119 +1,51 @@
 # API App
 
-Spring Boot backend for the FoodTruck platform.
+Spring Boot backend for FoodTruck with strict role boundaries.
 
-## Current Scope
+## Modules
 
-The API currently provides the backend foundation for:
+- `auth`: customer/operator signup + all role sign-in
+- `customer`: customer self profile APIs
+- `operator`: operator self profile + own truck APIs
+- `admin`: customer/truck management APIs
+- `truck`: truck/menu/location domain services
+- `health`
 
-- Spring Boot application startup
-- PostgreSQL connectivity
-- Flyway database migrations
-- Health endpoint at `/api/v1/health`
-- Base security and application configuration
-- Truck core CRUD APIs (`truck_profile`, `truck_location`, `menu_item`)
-- Customer CRUD APIs (`customer_profile` + `app_user`)
-- Truck owner profile and operator-role assignments
-- Swagger/OpenAPI docs
-- CORS enabled for browser/mobile clients
+## Security
 
-Planned modules in this app include:
+- Public:
+  - `/api/v1/health`
+  - `/api/v1/auth/**`
+  - `/api/v1/public/**`
+  - Swagger/OpenAPI
+- Customer-only: `/api/v1/customer/**`
+- Operator-only: `/api/v1/operator/**`
+- Admin-only: `/api/v1/admin/**`
 
-- auth
-- customer
-- truck
-- menu
-- location
-- order
-- payment
-- notification
+Global truck CRUD routes (`/api/v1/trucks`, `/api/v1/menu-items`, etc.) are admin-restricted.
 
-## Prerequisites
+## Data Model Changes
 
-- Java 21
-- Gradle 8+
-- Docker Desktop with `docker compose`
-
-## Environment
-
-From the repository root:
-
-```bash
-cp .env.example .env
-docker compose up -d
-```
-
-The API reads database configuration from the root `.env` file.
-
-Default local values:
-
-- Host: `localhost`
-- Port: `5432`
-- Database: `foodtruck`
-- Username: `foodtruck`
-- Password: `foodtruck`
+- `V6__auth_and_admin_updates.sql`
+  - username on `app_user`
+  - truck `is_active`
+  - customer `profile_image_url`
+- `V7__add_operator_profile.sql`
+  - `operator_profile` table
 
 ## Run
-
-Optional setup helper from repo root:
-
-```bash
-source scripts/dev-java21.sh
-```
 
 ```bash
 cd apps/api
 gradle bootRun
 ```
 
-The API listens on:
-
-```text
-http://localhost:8080
-```
-
-## Health Check
-
-```bash
-curl http://localhost:8080/api/v1/health
-```
-
-Expected response:
-
-```json
-{"status":"ok"}
-```
-
-## Truck Operator Roles
-
-The schema supports one owner and multiple operators per truck:
-
-- `truck_owner_profile` stores owner business profile
-- `truck_profile.owner_user_id` links each truck to its owner
-- `truck_operator_assignment` stores active operators per truck and role (`CHEF`, `CASHIER`, `DRIVER`)
-
-Role-based write authorization is available through:
-
-- Property: `app.authz.enforce-operator-permissions` (default `false`)
-- Request header when enabled: `X-Actor-User-Id: <app_user_uuid>`
-
-Current write permissions:
-
-- Owner: full truck/menu/location/operator management
-- Chef: menu write operations
-- Driver: location write operations
-- Cashier: reserved for order/payment flows (not wired yet in current module)
-
-## Endpoints
-
-- `GET /api/v1/health`
-- `GET/POST/PUT/DELETE /api/v1/customers`
-- `GET/POST/PUT/DELETE /api/v1/trucks`
-- `GET/POST/PUT/DELETE /api/v1/truck-locations`
-- `GET/POST/PUT/DELETE /api/v1/menu-items`
-- `GET/POST/PUT/DELETE /api/v1/truck-operators`
-
 ## API Docs
 
 - Swagger UI: `http://localhost:8080/swagger-ui/index.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+
+## Local Default Admin
+
+- Username: `admin`
+- Password: `Admin1234`

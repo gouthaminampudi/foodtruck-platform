@@ -1,9 +1,9 @@
 import { StatusBar } from "expo-status-bar";
 import * as Location from "expo-location";
 import React, { useEffect, useMemo, useState } from "react";
-import CustomerMap from "./src/components/CustomerMap";
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   SafeAreaView,
@@ -13,429 +13,491 @@ import {
   TextInput,
   View
 } from "react-native";
+import NotificationBanner from "./src/shared/components/NotificationBanner";
+import ProfileMenu from "./src/shared/components/ProfileMenu";
+import { getApiBaseUrl, requestJson, buildAuthHeader } from "./src/shared/services/apiClient";
+import { useNotifications } from "./src/shared/utils/notifications";
+import { hasRole } from "./src/shared/utils/roleGuard";
+import { isStrongPassword, isValidEmail } from "./src/shared/utils/validators";
+import CustomerMap from "./src/components/CustomerMap";
 
-const trucks = [
-  { id: "1", name: "Taco Transit", cuisine: "Mexican", eta: "5 min away", distance: "0.8 mi", rating: "4.8", status: "Open now" },
-  { id: "2", name: "Curry Current", cuisine: "Indian", eta: "9 min away", distance: "1.4 mi", rating: "4.7", status: "Open now" },
-  { id: "3", name: "Green Fork Truck", cuisine: "Vegan", eta: "12 min away", distance: "2.1 mi", rating: "4.9", status: "Open now" }
-];
+const ROUTES = {
+  ROOT: "/",
+  SIGNIN: "/signin",
+  SIGNUP: "/signup",
+  HOME: "/home",
+  PROFILE: "/profile",
+  EDIT_PROFILE: "/profile/edit"
+};
 
-const fallbackCoords = { latitude: 41.8781, longitude: -87.6298 };
-const truckOffsets = [
-  { latitude: 0.0064, longitude: -0.0042, pinColor: "#d6532f" },
-  { latitude: -0.0048, longitude: 0.0071, pinColor: "#f7b24d" },
-  { latitude: 0.0032, longitude: 0.0039, pinColor: "#3e9c8f" }
-];
+const fallbackCoords = { latitude: 32.9343, longitude: -97.2517 };
 
-function apiBaseUrl() {
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
-  if (fromEnv) {
-    return fromEnv.replace(/\/$/, "");
-  }
-  if (Platform.OS === "android") {
-    return "http://10.0.2.2:8080";
-  }
-  return "http://localhost:8080";
-}
-
-function formatCoordinates(coords) {
-  if (!coords) return "Location unavailable";
-  return `${coords.latitude.toFixed(5)}, ${coords.longitude.toFixed(5)}`;
-}
-
-function formatPlace(geocode, coords) {
-  if (geocode) {
-    const parts = [geocode.name, geocode.street, geocode.district, geocode.city, geocode.region].filter(Boolean);
-    if (parts.length > 0) return parts.slice(0, 2).join(", ");
-  }
-  return `Current area · ${formatCoordinates(coords)}`;
-}
-
-function buildTruckMarkers(centerCoords) {
-  return trucks.map((truck, index) => {
-    const offset = truckOffsets[index] ?? truckOffsets[0];
-    return {
-      ...truck,
-      latitude: centerCoords.latitude + offset.latitude,
-      longitude: centerCoords.longitude + offset.longitude,
-      pinColor: offset.pinColor
-    };
-  });
-}
-
-const emptyForm = {
-  email: "",
-  passwordHash: "",
+const signUpDefaults = {
   firstName: "",
   lastName: "",
+  username: "",
+  email: "",
+  phoneNumber: "",
+  password: "",
+  confirmPassword: ""
+};
+
+const signInDefaults = { username: "", password: "" };
+const profileDefaults = {
+  firstName: "",
+  lastName: "",
+  email: "",
   phoneNumber: "",
   preferredCuisines: "",
-  isActive: true
+  profileImageUrl: "",
+  currentPassword: "",
+  newPassword: "",
+  confirmNewPassword: ""
 };
 
 export default function App() {
-  const baseUrl = useMemo(() => apiBaseUrl(), []);
+  const baseUrl = useMemo(() => getApiBaseUrl(), []);
+  const { notification, notify } = useNotifications();
 
+  const [route, setRoute] = useState(ROUTES.ROOT);
   const [coords, setCoords] = useState(null);
-  const [placeLabel, setPlaceLabel] = useState("Locating you...");
-  const [coordinateLabel, setCoordinateLabel] = useState("Waiting for GPS fix");
-  const [locationMeta, setLocationMeta] = useState("Requesting location permission");
+  const [locationMessage, setLocationMessage] = useState("Resolving location...");
+  const [nearbyTrucks, setNearbyTrucks] = useState([]);
+  const [loadingTrucks, setLoadingTrucks] = useState(false);
+  const [auth, setAuth] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [signUpForm, setSignUpForm] = useState(signUpDefaults);
+  const [signInForm, setSignInForm] = useState(signInDefaults);
+  const [profileForm, setProfileForm] = useState(profileDefaults);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [customers, setCustomers] = useState([]);
-  const [form, setForm] = useState(emptyForm);
-  const [selectedUserId, setSelectedUserId] = useState(null);
-  const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorText, setErrorText] = useState("");
-  const [successText, setSuccessText] = useState("");
+  const isAuthenticatedCustomer = hasRole(auth, "CUSTOMER");
 
   useEffect(() => {
-    let active = true;
-    let browserWatchId = null;
-
-    async function resolvePlace(nextCoords, sourceLabel) {
-      if (!active) return;
-      setCoords(nextCoords);
-      setCoordinateLabel(formatCoordinates(nextCoords));
-      setLocationMeta(sourceLabel);
-      setPlaceLabel("Resolving address...");
-
-      try {
-        const [geocode] = await Location.reverseGeocodeAsync({
-          latitude: nextCoords.latitude,
-          longitude: nextCoords.longitude
-        });
-        if (!active) return;
-        setPlaceLabel(formatPlace(geocode, nextCoords));
-      } catch {
-        if (!active) return;
-        setPlaceLabel(`Current area · ${formatCoordinates(nextCoords)}`);
-      }
-    }
-
-    function loadBrowserLocation() {
-      if (!navigator.geolocation) {
-        setPlaceLabel("Location unavailable");
-        setCoordinateLabel("No coordinate data available");
-        setLocationMeta("Browser geolocation is not supported");
-        return;
-      }
-
-      browserWatchId = navigator.geolocation.watchPosition(
-        (position) => resolvePlace(position.coords, "Browser GPS live"),
-        () => {
-          if (!active) return;
-          setPlaceLabel("Location permission needed");
-          setCoordinateLabel("Enable browser location access");
-          setLocationMeta("Allow browser location access to show nearby trucks accurately");
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-      );
-    }
-
-    async function loadLocation() {
-      if (Platform.OS === "web") {
-        loadBrowserLocation();
-        return;
-      }
-
-      try {
-        const permission = await Location.requestForegroundPermissionsAsync();
-        if (!active) return;
-        if (permission.status !== "granted") {
-          setPlaceLabel("Location permission needed");
-          setCoordinateLabel("Enable device location access");
-          setLocationMeta("Enable location access to show nearby trucks accurately");
-          return;
-        }
-        const currentPosition = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
-        resolvePlace(currentPosition.coords, "GPS live");
-      } catch {
-        if (!active) return;
-        setPlaceLabel("Location unavailable");
-        setCoordinateLabel("Could not determine coordinates");
-        setLocationMeta("Could not determine your current location");
-      }
-    }
-
     loadLocation();
-    return () => {
-      active = false;
-      if (browserWatchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(browserWatchId);
-    };
   }, []);
 
   useEffect(() => {
-    loadCustomers();
-  }, []);
+    if (coords) {
+      loadNearbyTrucks(coords);
+    }
+  }, [coords]);
 
-  async function loadCustomers() {
-    setIsLoadingCustomers(true);
-    setErrorText("");
+  async function loadLocation() {
     try {
-      const response = await fetch(`${baseUrl}/api/v1/customers`);
-      if (!response.ok) {
-        throw new Error(`List failed (${response.status})`);
+      if (Platform.OS === "web" && navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setCoords({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude
+            });
+            setLocationMessage("Using browser location");
+          },
+          () => {
+            setCoords(fallbackCoords);
+            setLocationMessage("Location permission required");
+            notify("error", "Location permission required.");
+          }
+        );
+        return;
       }
-      setCustomers(await response.json());
-    } catch (error) {
-      setErrorText(error.message);
-    } finally {
-      setIsLoadingCustomers(false);
+
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted") {
+        setCoords(fallbackCoords);
+        setLocationMessage("Location permission required");
+        notify("error", "Location permission required.");
+        return;
+      }
+      const currentPosition = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      setCoords({
+        latitude: currentPosition.coords.latitude,
+        longitude: currentPosition.coords.longitude
+      });
+      setLocationMessage("Using current GPS location");
+    } catch {
+      setCoords(fallbackCoords);
+      setLocationMessage("Unable to read location");
+      notify("error", "Network error. Please try again.");
     }
   }
 
-  function selectCustomer(customer) {
-    setSelectedUserId(customer.userId);
-    setForm({
-      email: customer.email ?? "",
-      passwordHash: "",
-      firstName: customer.firstName ?? "",
-      lastName: customer.lastName ?? "",
-      phoneNumber: customer.phoneNumber ?? "",
-      preferredCuisines: customer.preferredCuisines ?? "",
-      isActive: customer.isActive ?? true
-    });
+  async function loadNearbyTrucks(location) {
+    setLoadingTrucks(true);
+    try {
+      const data = await requestJson(
+        `${baseUrl}/api/v1/public/trucks/nearby?latitude=${location.latitude}&longitude=${location.longitude}&radiusMeters=12000`
+      );
+      setNearbyTrucks(data);
+      if (data.length === 0) {
+        notify("error", "No nearby trucks found.");
+      }
+    } catch {
+      notify("error", "Network error. Please try again.");
+    } finally {
+      setLoadingTrucks(false);
+    }
   }
 
-  function resetForm() {
-    setSelectedUserId(null);
-    setForm(emptyForm);
-    setErrorText("");
-    setSuccessText("");
+  async function showMenu(truckId) {
+    try {
+      const items = await requestJson(`${baseUrl}/api/v1/public/trucks/${truckId}/menu`);
+      if (!items.length) {
+        Alert.alert("Menu", "No menu items found.");
+        return;
+      }
+      const preview = items
+        .slice(0, 8)
+        .map((item) => `${item.itemName} - $${(item.priceCents / 100).toFixed(2)}`)
+        .join("\n");
+      Alert.alert("Menu", preview);
+    } catch {
+      notify("error", "Network error. Please try again.");
+    }
   }
 
-  async function saveCustomer() {
-    if (!form.email || !form.passwordHash) {
-      setErrorText("Email and password hash are required.");
-      setSuccessText("");
+  function validateSignUp() {
+    if (
+      !signUpForm.firstName ||
+      !signUpForm.lastName ||
+      !signUpForm.username ||
+      !signUpForm.email ||
+      !signUpForm.phoneNumber ||
+      !signUpForm.password ||
+      !signUpForm.confirmPassword
+    ) {
+      notify("error", "This field is required.");
+      return false;
+    }
+    if (!isValidEmail(signUpForm.email)) {
+      notify("error", "Email format is invalid.");
+      return false;
+    }
+    if (!isStrongPassword(signUpForm.password)) {
+      notify("error", "Password must meet minimum requirements.");
+      return false;
+    }
+    if (signUpForm.password !== signUpForm.confirmPassword) {
+      notify("error", "Passwords do not match.");
+      return false;
+    }
+    return true;
+  }
+
+  async function onSignUp() {
+    if (!validateSignUp()) {
       return;
     }
-
-    setIsSaving(true);
-    setErrorText("");
-    setSuccessText("");
+    setSubmitting(true);
     try {
-      const targetUrl = selectedUserId
-        ? `${baseUrl}/api/v1/customers/${selectedUserId}`
-        : `${baseUrl}/api/v1/customers`;
-      const method = selectedUserId ? "PUT" : "POST";
-      const response = await fetch(targetUrl, {
-        method,
+      await requestJson(`${baseUrl}/api/v1/auth/customer/signup`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form)
+        body: JSON.stringify(signUpForm)
       });
-      if (!response.ok) {
-        const body = await response.text();
-        throw new Error(`Save failed (${response.status}): ${body}`);
-      }
-      const savedCustomer = await response.json();
-      await loadCustomers();
-      if (!selectedUserId) {
-        resetForm();
-        setSuccessText(`Customer created: ${savedCustomer.email}`);
-      } else {
-        setSuccessText(`Customer updated: ${savedCustomer.email}`);
-      }
+      setSignUpForm(signUpDefaults);
+      setRoute(ROUTES.SIGNIN);
+      notify("success", "Account created successfully.");
     } catch (error) {
-      setErrorText(error.message);
-      setSuccessText("");
+      notify("error", error.message || "Unable to create account.");
     } finally {
-      setIsSaving(false);
+      setSubmitting(false);
     }
   }
 
-  async function deleteCustomer(userId) {
-    setIsSaving(true);
-    setErrorText("");
-    setSuccessText("");
+  async function onSignIn() {
+    if (!signInForm.username || !signInForm.password) {
+      notify("error", "This field is required.");
+      return;
+    }
+    setSubmitting(true);
     try {
-      const response = await fetch(`${baseUrl}/api/v1/customers/${userId}`, { method: "DELETE" });
-      if (!response.ok) {
-        throw new Error(`Delete failed (${response.status})`);
+      const signedIn = await requestJson(`${baseUrl}/api/v1/auth/customer/signin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(signInForm)
+      });
+      if (signedIn.role !== "CUSTOMER") {
+        notify("error", "Unauthorized access.");
+        return;
       }
-      await loadCustomers();
-      setSuccessText("Customer deleted.");
-      if (selectedUserId === userId) {
-        resetForm();
-      }
-    } catch (error) {
-      setErrorText(error.message);
-      setSuccessText("");
+      setAuth(signedIn);
+      setSignInForm(signInDefaults);
+      await loadProfile(signedIn);
+      setRoute(ROUTES.HOME);
+      notify("success", "Login successful.");
+    } catch {
+      notify("error", "Invalid username or password.");
     } finally {
-      setIsSaving(false);
+      setSubmitting(false);
     }
   }
 
-  const locationSummary = useMemo(
-    () => (coords ? `Showing online trucks near ${placeLabel} · ${coordinateLabel}` : "Showing truck preview data until live location is available"),
-    [coords, placeLabel, coordinateLabel]
-  );
+  async function loadProfile(authState = auth) {
+    if (!authState) {
+      return;
+    }
+    try {
+      const data = await requestJson(`${baseUrl}/api/v1/customer/profile`, {
+        headers: buildAuthHeader(authState)
+      });
+      setProfile(data);
+      setProfileForm({
+        firstName: data.firstName ?? "",
+        lastName: data.lastName ?? "",
+        email: data.email ?? "",
+        phoneNumber: data.phoneNumber ?? "",
+        preferredCuisines: data.preferredCuisines ?? "",
+        profileImageUrl: data.profileImageUrl ?? "",
+        currentPassword: "",
+        newPassword: "",
+        confirmNewPassword: ""
+      });
+    } catch {
+      notify("error", "Unable to update profile.");
+    }
+  }
 
-  const mapRegion = useMemo(
-    () => ({
+  async function onUpdateProfile() {
+    if (!isAuthenticatedCustomer) {
+      notify("error", "Unauthorized access.");
+      return;
+    }
+    if (!profileForm.email || !isValidEmail(profileForm.email)) {
+      notify("error", "Email format is invalid.");
+      return;
+    }
+    if (profileForm.newPassword && !isStrongPassword(profileForm.newPassword)) {
+      notify("error", "Password must meet minimum requirements.");
+      return;
+    }
+    if (profileForm.newPassword && profileForm.newPassword !== profileForm.confirmNewPassword) {
+      notify("error", "Passwords do not match.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await requestJson(`${baseUrl}/api/v1/customer/profile`, {
+        method: "PUT",
+        headers: {
+          ...buildAuthHeader(auth),
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(profileForm)
+      });
+      await loadProfile();
+      setRoute(ROUTES.HOME);
+      notify("success", "Profile updated successfully.");
+    } catch {
+      notify("error", "Unable to update profile.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function logout() {
+    setAuth(null);
+    setProfile(null);
+    setMenuOpen(false);
+    setRoute(ROUTES.ROOT);
+    notify("success", "Changes saved successfully.");
+  }
+
+  function renderAuthButtons() {
+    return (
+      <View style={styles.authButtons}>
+        <Pressable style={styles.lightButton} onPress={() => setRoute(ROUTES.SIGNUP)}>
+          <Text style={styles.lightButtonText}>Sign Up</Text>
+        </Pressable>
+        <Pressable style={styles.darkButton} onPress={() => setRoute(ROUTES.SIGNIN)}>
+          <Text style={styles.darkButtonText}>Sign In</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  function renderHeader() {
+    return (
+      <View style={styles.header}>
+        {isAuthenticatedCustomer ? (
+          <ProfileMenu
+            firstName={profile?.firstName}
+            imageUrl={profile?.profileImageUrl}
+            isOpen={menuOpen}
+            onToggle={() => setMenuOpen((value) => !value)}
+            onViewProfile={() => { setMenuOpen(false); setRoute(ROUTES.PROFILE); }}
+            onEditProfile={() => { setMenuOpen(false); setRoute(ROUTES.EDIT_PROFILE); }}
+            onLogout={logout}
+          />
+        ) : renderAuthButtons()}
+        <View>
+          <Text style={styles.title}>Customer Home</Text>
+          <Text style={styles.subtitle}>{locationMessage}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  function renderHome() {
+    const mapRegion = {
       latitude: coords?.latitude ?? fallbackCoords.latitude,
       longitude: coords?.longitude ?? fallbackCoords.longitude,
-      latitudeDelta: 0.03,
-      longitudeDelta: 0.03
-    }),
-    [coords]
-  );
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05
+    };
+    const markers = nearbyTrucks.map((truck, index) => ({
+      id: truck.truckId,
+      name: truck.truckName,
+      cuisine: truck.foodCategory,
+      eta: "Nearby",
+      distance: `${truck.distanceMiles} mi`,
+      latitude: truck.latitude,
+      longitude: truck.longitude,
+      pinColor: index % 2 === 0 ? "#d65f37" : "#1d8c79"
+    }));
 
-  const nearbyTruckMarkers = useMemo(() => buildTruckMarkers(coords ?? fallbackCoords), [coords]);
+    return (
+      <>
+        <View style={styles.locationCard}>
+          <Text style={styles.locationTitle}>Current Location</Text>
+          <Text style={styles.meta}>{locationMessage}</Text>
+          <Text style={styles.meta}>
+            {`Lat ${mapRegion.latitude.toFixed(5)}, Lng ${mapRegion.longitude.toFixed(5)}`}
+          </Text>
+        </View>
+        <View style={styles.mapCard}>
+          <CustomerMap mapRegion={mapRegion} nearbyTruckMarkers={markers} placeLabel={locationMessage} />
+        </View>
+        <View style={styles.listCard}>
+          <Text style={styles.sectionTitle}>Nearby Food Trucks</Text>
+          {loadingTrucks ? <ActivityIndicator style={styles.loader} /> : null}
+          {!loadingTrucks && nearbyTrucks.length === 0 ? <Text style={styles.meta}>No nearby trucks found.</Text> : null}
+          {nearbyTrucks.map((truck) => (
+            <View key={truck.truckId} style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemTitle}>{truck.truckName}</Text>
+                <Text style={styles.meta}>{truck.distanceMiles} mi • {truck.foodCategory}</Text>
+              </View>
+              <Pressable style={styles.darkButton} onPress={() => showMenu(truck.truckId)}>
+                <Text style={styles.darkButtonText}>View Menu</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      </>
+    );
+  }
+
+  function renderSignUp() {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Customer Sign Up</Text>
+        <TextInput style={styles.input} value={signUpForm.firstName} onChangeText={(value) => setSignUpForm((prev) => ({ ...prev, firstName: value }))} placeholder="First Name" />
+        <TextInput style={styles.input} value={signUpForm.lastName} onChangeText={(value) => setSignUpForm((prev) => ({ ...prev, lastName: value }))} placeholder="Last Name" />
+        <TextInput style={styles.input} value={signUpForm.username} onChangeText={(value) => setSignUpForm((prev) => ({ ...prev, username: value }))} placeholder="Username" autoCapitalize="none" />
+        <TextInput style={styles.input} value={signUpForm.email} onChangeText={(value) => setSignUpForm((prev) => ({ ...prev, email: value }))} placeholder="Email" autoCapitalize="none" />
+        <TextInput style={styles.input} value={signUpForm.phoneNumber} onChangeText={(value) => setSignUpForm((prev) => ({ ...prev, phoneNumber: value }))} placeholder="Phone Number" />
+        <TextInput style={styles.input} value={signUpForm.password} onChangeText={(value) => setSignUpForm((prev) => ({ ...prev, password: value }))} placeholder="Password" secureTextEntry />
+        <TextInput style={styles.input} value={signUpForm.confirmPassword} onChangeText={(value) => setSignUpForm((prev) => ({ ...prev, confirmPassword: value }))} placeholder="Confirm Password" secureTextEntry />
+        <Pressable style={styles.darkButtonWide} onPress={onSignUp} disabled={submitting}>
+          <Text style={styles.darkButtonText}>Sign Up</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  function renderSignIn() {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Customer Sign In</Text>
+        <TextInput style={styles.input} value={signInForm.username} onChangeText={(value) => setSignInForm((prev) => ({ ...prev, username: value }))} placeholder="Username" autoCapitalize="none" />
+        <TextInput style={styles.input} value={signInForm.password} onChangeText={(value) => setSignInForm((prev) => ({ ...prev, password: value }))} placeholder="Password" secureTextEntry />
+        <Pressable style={styles.darkButtonWide} onPress={onSignIn} disabled={submitting}>
+          <Text style={styles.darkButtonText}>Sign In</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  function renderProfile() {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Customer Profile</Text>
+        <Text style={styles.meta}>Name: {profile?.firstName} {profile?.lastName}</Text>
+        <Text style={styles.meta}>Username: {profile?.username}</Text>
+        <Text style={styles.meta}>Email: {profile?.email}</Text>
+        <Text style={styles.meta}>Phone: {profile?.phoneNumber || "-"}</Text>
+      </View>
+    );
+  }
+
+  function renderEditProfile() {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Edit Customer Profile</Text>
+        <TextInput style={styles.input} value={profileForm.firstName} onChangeText={(value) => setProfileForm((prev) => ({ ...prev, firstName: value }))} placeholder="First Name" />
+        <TextInput style={styles.input} value={profileForm.lastName} onChangeText={(value) => setProfileForm((prev) => ({ ...prev, lastName: value }))} placeholder="Last Name" />
+        <TextInput style={styles.input} value={profileForm.email} onChangeText={(value) => setProfileForm((prev) => ({ ...prev, email: value }))} placeholder="Email" autoCapitalize="none" />
+        <TextInput style={styles.input} value={profileForm.phoneNumber} onChangeText={(value) => setProfileForm((prev) => ({ ...prev, phoneNumber: value }))} placeholder="Phone Number" />
+        <TextInput style={styles.input} value={profileForm.profileImageUrl} onChangeText={(value) => setProfileForm((prev) => ({ ...prev, profileImageUrl: value }))} placeholder="Profile Image URL" autoCapitalize="none" />
+        <TextInput style={styles.input} value={profileForm.currentPassword} onChangeText={(value) => setProfileForm((prev) => ({ ...prev, currentPassword: value }))} placeholder="Current Password" secureTextEntry />
+        <TextInput style={styles.input} value={profileForm.newPassword} onChangeText={(value) => setProfileForm((prev) => ({ ...prev, newPassword: value }))} placeholder="New Password" secureTextEntry />
+        <TextInput style={styles.input} value={profileForm.confirmNewPassword} onChangeText={(value) => setProfileForm((prev) => ({ ...prev, confirmNewPassword: value }))} placeholder="Confirm New Password" secureTextEntry />
+        <Pressable style={styles.darkButtonWide} onPress={onUpdateProfile} disabled={submitting}>
+          <Text style={styles.darkButtonText}>Save</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  function renderByRoute() {
+    if (route === ROUTES.SIGNUP) return renderSignUp();
+    if (route === ROUTES.SIGNIN) return renderSignIn();
+    if (route === ROUTES.PROFILE) return renderProfile();
+    if (route === ROUTES.EDIT_PROFILE) return renderEditProfile();
+    return renderHome();
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false} contentInsetAdjustmentBehavior="automatic">
-        <View style={styles.hero}>
-          <Text style={styles.eyebrow}>Customer Home</Text>
-          <Text style={styles.title}>Discover + Customer CRUD</Text>
-          <Text style={styles.subtitle}>Map discovery and customer profile management in one screen.</Text>
-        </View>
-
-        <View style={styles.locationCard}>
-          <View style={styles.locationIconWrap}>
-            <Text style={styles.locationIcon}>◎</Text>
-          </View>
-          <View style={styles.locationBody}>
-            <Text style={styles.locationLabel}>Current location</Text>
-            <Text style={styles.locationValue}>{placeLabel}</Text>
-            <Text style={styles.coordinateValue}>{coordinateLabel}</Text>
-            <Text style={styles.locationMeta}>{locationMeta}</Text>
-          </View>
-        </View>
-
-        <View style={styles.mapCard}>
-          <View style={styles.mapHeader}>
-            <Text style={styles.sectionTitle}>Nearby Map</Text>
-            <View style={styles.liveBadge}>
-              <Text style={styles.liveBadgeText}>LIVE</Text>
-            </View>
-          </View>
-          <View style={styles.mapCanvas}>
-            <CustomerMap mapRegion={mapRegion} nearbyTruckMarkers={nearbyTruckMarkers} placeLabel={placeLabel} />
-          </View>
-          <View style={styles.mapFooter}>
-            <Text style={styles.mapFooterText}>{locationSummary}</Text>
-          </View>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitleDark}>Customer CRUD</Text>
-          <Text style={styles.sectionMetaDark}>{selectedUserId ? "Editing existing customer" : "Creating new customer"}</Text>
-        </View>
-
-        <View style={styles.formCard}>
-          <Text style={styles.apiHint}>API: {baseUrl}/api/v1/customers</Text>
-          <TextInput value={form.email} onChangeText={(value) => setForm((prev) => ({ ...prev, email: value }))} placeholder="email" style={styles.input} autoCapitalize="none" />
-          <TextInput value={form.passwordHash} onChangeText={(value) => setForm((prev) => ({ ...prev, passwordHash: value }))} placeholder="password hash" style={styles.input} autoCapitalize="none" />
-          <TextInput value={form.firstName} onChangeText={(value) => setForm((prev) => ({ ...prev, firstName: value }))} placeholder="first name" style={styles.input} />
-          <TextInput value={form.lastName} onChangeText={(value) => setForm((prev) => ({ ...prev, lastName: value }))} placeholder="last name" style={styles.input} />
-          <TextInput value={form.phoneNumber} onChangeText={(value) => setForm((prev) => ({ ...prev, phoneNumber: value }))} placeholder="phone number" style={styles.input} />
-          <TextInput value={form.preferredCuisines} onChangeText={(value) => setForm((prev) => ({ ...prev, preferredCuisines: value }))} placeholder="preferred cuisines (free text)" style={styles.input} />
-
-          {successText ? <Text style={styles.successText}>{successText}</Text> : null}
-          {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
-
-          <View style={styles.buttonRow}>
-            <Pressable style={[styles.button, styles.buttonPrimary]} onPress={saveCustomer} disabled={isSaving}>
-              <Text style={styles.buttonText}>{selectedUserId ? "Update" : "Create"}</Text>
-            </Pressable>
-            <Pressable style={[styles.button, styles.buttonSecondary]} onPress={resetForm} disabled={isSaving}>
-              <Text style={styles.buttonTextDark}>Clear</Text>
-            </Pressable>
-            <Pressable style={[styles.button, styles.buttonSecondary]} onPress={loadCustomers} disabled={isSaving || isLoadingCustomers}>
-              <Text style={styles.buttonTextDark}>Refresh</Text>
-            </Pressable>
-          </View>
-          {isSaving ? <ActivityIndicator style={styles.loader} /> : null}
-        </View>
-
-        <View style={styles.listCard}>
-          <Text style={styles.listTitle}>Customers</Text>
-          {isLoadingCustomers ? <ActivityIndicator style={styles.loader} /> : null}
-          {customers.map((customer) => (
-            <View key={customer.userId} style={styles.listItem}>
-              <View style={styles.listItemBody}>
-                <Text style={styles.listItemTitle}>
-                  {customer.firstName || "-"} {customer.lastName || "-"}
-                </Text>
-                <Text style={styles.listItemMeta}>{customer.email}</Text>
-                <Text style={styles.listItemMeta}>User ID: {customer.userId}</Text>
-              </View>
-              <View style={styles.itemActions}>
-                <Pressable style={[styles.button, styles.miniButton]} onPress={() => selectCustomer(customer)}>
-                  <Text style={styles.buttonTextDark}>Edit</Text>
-                </Pressable>
-                <Pressable style={[styles.button, styles.miniButtonDanger]} onPress={() => deleteCustomer(customer.userId)}>
-                  <Text style={styles.buttonText}>Delete</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
-        </View>
+      <ScrollView contentContainerStyle={styles.container}>
+        <NotificationBanner notification={notification} />
+        {renderHeader()}
+        {route !== ROUTES.HOME ? (
+          <Pressable style={styles.lightButton} onPress={() => setRoute(ROUTES.HOME)}>
+            <Text style={styles.lightButtonText}>Back to Home</Text>
+          </Pressable>
+        ) : null}
+        {renderByRoute()}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f5efe3" },
-  scrollView: { flex: 1 },
-  container: { padding: 20, paddingBottom: 48 },
-  hero: { marginBottom: 18 },
-  eyebrow: { color: "#8f3a21", fontSize: 12, fontWeight: "700", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 },
-  title: { color: "#1f1d1a", fontSize: 30, fontWeight: "800", lineHeight: 36, marginBottom: 8 },
-  subtitle: { color: "#5b554b", fontSize: 15, lineHeight: 22 },
-  locationCard: { backgroundColor: "#fffaf2", borderRadius: 22, padding: 18, marginBottom: 18, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#eadfca" },
-  locationIconWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#f6dcc4", alignItems: "center", justifyContent: "center", marginRight: 14 },
-  locationIcon: { color: "#8f3a21", fontSize: 20, fontWeight: "700" },
-  locationBody: { flex: 1 },
-  locationLabel: { color: "#8b8375", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1 },
-  locationValue: { color: "#1f1d1a", fontSize: 18, fontWeight: "800", marginTop: 4 },
-  coordinateValue: { color: "#514a41", fontSize: 13, fontWeight: "700", marginTop: 6 },
-  locationMeta: { color: "#6c655c", fontSize: 13, marginTop: 4 },
-  mapCard: { backgroundColor: "#132a32", borderRadius: 30, padding: 18, marginBottom: 22, overflow: "hidden" },
-  mapHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
-  sectionTitle: { color: "#f9f4ea", fontSize: 20, fontWeight: "800" },
-  liveBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "#d6532f" },
-  liveBadgeText: { color: "#fff7ee", fontSize: 11, fontWeight: "800", letterSpacing: 1 },
-  mapCanvas: { height: 220, borderRadius: 24, backgroundColor: "#20505d", overflow: "hidden" },
-  mapFooter: { marginTop: 14 },
-  mapFooterText: { color: "#c6dfde", fontSize: 13, lineHeight: 18 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  sectionTitleDark: { color: "#1f1d1a", fontSize: 24, fontWeight: "800" },
-  sectionMetaDark: { color: "#7d7264", fontSize: 12, fontWeight: "700" },
-  formCard: { backgroundColor: "#fffaf2", borderRadius: 20, padding: 14, borderWidth: 1, borderColor: "#eadfca", marginBottom: 16 },
-  apiHint: { color: "#7d7264", fontSize: 12, marginBottom: 8 },
-  input: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#eadfca", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10, color: "#1f1d1a" },
-  buttonRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginTop: 4 },
-  button: { borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14 },
-  buttonPrimary: { backgroundColor: "#8f3a21" },
-  buttonSecondary: { backgroundColor: "#efe4d3" },
-  buttonText: { color: "#fffaf2", fontWeight: "800", fontSize: 13 },
-  buttonTextDark: { color: "#4f463b", fontWeight: "800", fontSize: 13 },
-  loader: { marginTop: 10 },
-  successText: {
-    color: "#166534",
-    fontSize: 12,
-    marginBottom: 8,
-    backgroundColor: "#dcfce7",
-    borderColor: "#86efac",
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8
-  },
-  errorText: { color: "#c31919", fontSize: 12, marginTop: 8 },
-  listCard: { backgroundColor: "#fffaf2", borderRadius: 20, padding: 14, borderWidth: 1, borderColor: "#eadfca" },
-  listTitle: { color: "#1f1d1a", fontSize: 20, fontWeight: "800", marginBottom: 8 },
-  listItem: { flexDirection: "row", justifyContent: "space-between", borderWidth: 1, borderColor: "#eadfca", borderRadius: 12, padding: 10, marginBottom: 8, gap: 10 },
-  listItemBody: { flex: 1 },
-  listItemTitle: { color: "#1f1d1a", fontSize: 15, fontWeight: "800" },
-  listItemMeta: { color: "#6c655c", fontSize: 12, marginTop: 2 },
-  itemActions: { justifyContent: "center", gap: 6 },
-  miniButton: { backgroundColor: "#efe4d3", paddingHorizontal: 12, paddingVertical: 8 },
-  miniButtonDanger: { backgroundColor: "#d6532f", paddingHorizontal: 12, paddingVertical: 8 }
+  safeArea: { flex: 1, backgroundColor: "#f6f7f4" },
+  container: { padding: 16, gap: 12, paddingBottom: 40 },
+  header: { gap: 10 },
+  title: { fontSize: 24, fontWeight: "800", color: "#173544" },
+  subtitle: { color: "#50616d" },
+  authButtons: { flexDirection: "row", justifyContent: "flex-end", gap: 10 },
+  mapCard: { height: 220, borderRadius: 14, overflow: "hidden", backgroundColor: "#102b34" },
+  locationCard: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#e1e6ea", borderRadius: 12, padding: 12, gap: 4 },
+  locationTitle: { color: "#132731", fontWeight: "700", fontSize: 16 },
+  listCard: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#e1e6ea", borderRadius: 12, padding: 12, gap: 8 },
+  sectionTitle: { fontSize: 18, fontWeight: "700", color: "#132731" },
+  card: { backgroundColor: "#fff", borderWidth: 1, borderColor: "#e1e6ea", borderRadius: 12, padding: 12, gap: 8 },
+  input: { borderWidth: 1, borderColor: "#d2d9df", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, backgroundColor: "#fbfcfd" },
+  darkButton: { backgroundColor: "#20445c", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, alignItems: "center" },
+  darkButtonWide: { backgroundColor: "#20445c", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, alignItems: "center" },
+  darkButtonText: { color: "#fff", fontWeight: "700" },
+  lightButton: { backgroundColor: "#e8edf2", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, alignItems: "center" },
+  lightButtonText: { color: "#173544", fontWeight: "700" },
+  row: { flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 1, borderBottomColor: "#e8edf1", paddingVertical: 8 },
+  itemTitle: { color: "#173544", fontWeight: "700" },
+  meta: { color: "#5b7280" },
+  loader: { marginVertical: 10 }
 });

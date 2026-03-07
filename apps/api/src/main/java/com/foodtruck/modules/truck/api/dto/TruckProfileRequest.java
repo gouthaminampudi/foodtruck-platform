@@ -21,6 +21,7 @@ public record TruckProfileRequest(
     String openingHoursJson,
     @PositiveOrZero Integer serviceRadiusMeters,
     Boolean isVerified,
-    Boolean isOnline
+    Boolean isOnline,
+    Boolean isActive
 ) {
 }

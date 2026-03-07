@@ -29,5 +29,10 @@ management:
 app:
   cors:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:*}
+  auth:
+    admin:
+      username: ${APP_ADMIN_USERNAME:admin}
+      email: ${APP_ADMIN_EMAIL:admin@foodtruck.local}
+      password: ${APP_ADMIN_PASSWORD:Admin1234}
   authz:
     enforce-operator-permissions: false

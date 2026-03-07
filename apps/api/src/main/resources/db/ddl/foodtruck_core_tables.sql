@@ -35,6 +35,7 @@ create table if not exists truck_profile (
     service_radius_meters integer not null default 5000,
     is_verified boolean not null default false,
     is_online boolean not null default false,
+    is_active boolean not null default true,
     created_at timestamp not null default current_timestamp,
     updated_at timestamp not null default current_timestamp
 );

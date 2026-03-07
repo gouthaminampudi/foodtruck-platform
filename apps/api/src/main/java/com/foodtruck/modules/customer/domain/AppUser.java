@@ -16,6 +16,9 @@ public class AppUser {
     @Id
     private UUID id;
 
+    @Column(name = "username", nullable = false, unique = true, length = 100)
+    private String username;
+
     @Column(name = "email", nullable = false, unique = true, length = 255)
     private String email;
 
@@ -61,6 +64,14 @@ public class AppUser {
 
     public String getEmail() {
         return email;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 
     public void setEmail(String email) {

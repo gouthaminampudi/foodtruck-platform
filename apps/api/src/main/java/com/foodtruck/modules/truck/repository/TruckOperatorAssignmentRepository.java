@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface TruckOperatorAssignmentRepository extends JpaRepository<TruckOperatorAssignment, UUID> {
 
     List<TruckOperatorAssignment> findByTruckId(UUID truckId);
+    List<TruckOperatorAssignment> findByUserIdAndIsActiveTrue(UUID userId);
+    Optional<TruckOperatorAssignment> findFirstByUserIdAndIsActiveTrue(UUID userId);
 
     Optional<TruckOperatorAssignment> findByTruckIdAndUserId(UUID truckId, UUID userId);
 

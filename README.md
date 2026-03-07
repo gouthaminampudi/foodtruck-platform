@@ -1,323 +1,126 @@
 # FoodTruck
 
-FoodTruck is a monorepo for a marketplace and operations platform that connects
-customers with nearby food trucks and gives operators the tools to manage truck
-setup, menus, location broadcasting, orders, and growth workflows.
+Monorepo with separated role-based apps and API:
 
-## Product Summary
+- `apps/customer-mobile` (customer-only UX)
+- `apps/operator-mobile` (operator-only UX)
+- `apps/admin-mobile` (admin-only management UX)
+- `apps/api` (Spring Boot backend)
 
-Based on the current ClickUp lists and tasks, the platform is centered on:
+## Role Boundaries
 
-- Customer discovery through a map-first home screen, advanced search and
-  filters, truck profiles, ratings, reviews, loyalty, and favorites
-- Real-time location and discovery features such as customer map view, truck
-  location broadcast, and proximity alerts when favorite trucks are nearby
-- Ordering and payments flows such as order creation, scheduled pickup, Stripe
-  integration, and smarter queue prioritization
-- Operator workflows for truck registration, menu management, and social
-  publishing
+- Customer app:
+  - nearby map + nearby trucks
+  - customer sign up/sign in
+  - own profile view/edit
+  - no all-customer visibility
+- Operator app:
+  - operator sign up/sign in
+  - own profile view/edit
+  - own truck details/edit and status/location updates
+  - no admin screens
+- Admin app:
+  - admin sign in
+  - Admin Home menu only
+  - separate Customer Management page
+  - separate Truck Management page
 
-Representative ClickUp requirements used for this summary:
+## Run
 
-- Customer Mobile App:
-  [Home Map: Show online food trucks filtered by customer cuisine preferences](https://app.clickup.com/t/86e031tqj),
-  [Advanced Search & Filter](https://app.clickup.com/t/86e031vck),
-  [Reviews & Ratings](https://app.clickup.com/t/86e031wtq),
-  [Loyalty Program](https://app.clickup.com/t/86e031wt9)
-- Location & Discovery:
-  [Truck Location Broadcast](https://app.clickup.com/t/86dzzvgnt),
-  [Geofence Detection](https://app.clickup.com/t/86e031wu0)
-- Ordering & Payments:
-  [Order Ahead](https://app.clickup.com/t/86e031wt7),
-  [Intelligent Order Queue](https://app.clickup.com/t/86e0327r6)
-- Food Truck Onboarding:
-  [Operator Social Publishing Hub](https://app.clickup.com/t/86e0328az),
-  [Favorite Trucks and nearby-alert preferences](https://app.clickup.com/t/86e031wtw)
-
-## Repository Layout
-
-```text
-apps/
-  api/               Spring Boot backend
-  customer-mobile/   Expo customer application
-  operator-mobile/   Expo operator application
-packages/
-  shared-types/      Shared TypeScript package
-docs/
-docker-compose.yml
-```
-
-## Tech Stack
-
-- Backend: Spring Boot 3.3, Java 21, Gradle
-- Database: PostgreSQL 16 via Docker Compose
-- Mobile: Expo SDK 54, React Native 0.81, React 19
-- Maps: Google Maps on native customer app builds
-
-## Prerequisites
-
-Install these before trying to run the repo:
-
-- Docker Desktop with `docker compose`
-- Java 21
-- Gradle 8+
-- Node.js 20
-- Xcode and iOS Simulator for iOS development
-- Android Studio / Android SDK for Android development
-
-Recommended version check:
-
-```bash
-java -version
-gradle -v
-node -v
-docker --version
-docker compose version
-```
-
-`node -v` should report a Node 20 release. Expo had runtime issues under Node
-22 during local setup.
-
-## First-Time Setup
-
-### 1. Clone and configure environment
-
-```bash
-git clone <repo-url>
-cd FoodTruck
-cp .env.example .env
-```
-
-For the customer mobile app, also create the app-local environment file:
-
-```bash
-cp apps/customer-mobile/.env.example apps/customer-mobile/.env
-```
-
-Set `GOOGLE_MAPS_API_KEY` in `apps/customer-mobile/.env` before running the
-native customer map.
-Set `EXPO_PUBLIC_API_URL` when the API is not on the same host as the app.
-
-### 2. Start Postgres
+1. Start Postgres:
 
 ```bash
 docker compose up -d
 ```
 
-Postgres defaults:
-
-- Host: `localhost`
-- Port: `5432`
-- Database: `foodtruck`
-- Username: `foodtruck`
-- Password: `foodtruck`
-
-### 3. Start the API
-
-The API reads its database settings from `.env` and listens on port `8080`.
+2. Start API:
 
 ```bash
 cd apps/api
 gradle bootRun
 ```
 
-Useful check:
-
-```bash
-curl http://localhost:8080/api/v1/health
-```
-
-Expected response:
-
-```json
-{"status":"ok"}
-```
-
-### 4. Install mobile app dependencies
-
-Customer app:
+3. Start customer app:
 
 ```bash
 cd apps/customer-mobile
 npm install
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web -- --port 8081
 ```
 
-Operator app:
+4. Start operator app:
 
 ```bash
 cd apps/operator-mobile
 npm install
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web -- --port 8082
 ```
 
-If you use Homebrew Node 20 on macOS and the default shell still points to a
-different Node version, run commands with:
+5. Start admin app:
 
 ```bash
-export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-```
-
-For Java 21 + Gradle environment setup in this repo, you can source:
-
-```bash
-source scripts/dev-java21.sh
-```
-
-## Running the Customer App
-
-### Web
-
-```bash
-cd apps/customer-mobile
-export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-npm run web
-```
-
-Then open:
-
-```text
-http://localhost:8081
-```
-
-### iOS Simulator
-
-Before first iOS launch on a new machine:
-
-```bash
-sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
-sudo xcodebuild -license accept
-sudo xcodebuild -runFirstLaunch
-open -a Simulator
-```
-
-If Simulator has no devices available, install an iOS runtime in Xcode:
-
-- `Xcode` -> `Settings` -> `Platforms`
-- Install an iOS runtime
-- Confirm a simulator device exists in `Window` -> `Devices and Simulators`
-
-Run the app:
-
-```bash
-cd apps/customer-mobile
-export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-npm run ios
-```
-
-### Android
-
-Start an Android emulator first, then run:
-
-```bash
-cd apps/customer-mobile
-export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-npm run android
-```
-
-## Running the Operator App
-
-The operator app is runnable and includes CRUD screens for truck profiles and
-truck operator assignments.
-
-```bash
-cd apps/operator-mobile
+cd apps/admin-mobile
 npm install
-export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web
+EXPO_PUBLIC_API_URL=http://localhost:8080 npm run web -- --port 8083
 ```
 
-Open:
+## Local URLs
 
-```text
-http://localhost:8082
-```
+- API: `http://localhost:8080`
+- Swagger: `http://localhost:8080/swagger-ui/index.html`
+- Customer Web: `http://localhost:8081`
+- Operator Web: `http://localhost:8082`
+- Admin Web: `http://localhost:8083` (run admin app on this port if needed)
 
-For iOS / Android:
+## Default Admin Credentials
 
-```bash
-cd apps/operator-mobile
-export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-EXPO_PUBLIC_API_URL=http://localhost:8080 npm run ios
-EXPO_PUBLIC_API_URL=http://localhost:8080 npm run android
-```
+- Username: `admin`
+- Password: `Admin1234`
 
-## Implemented API Functionality
+Configured by:
 
-- Health endpoint: `GET /api/v1/health`
-- Customer CRUD: `GET/POST/PUT/DELETE /api/v1/customers`
-- Truck profile CRUD: `GET/POST/PUT/DELETE /api/v1/trucks`
-- Truck location CRUD: `GET/POST/PUT/DELETE /api/v1/truck-locations`
-- Menu item CRUD: `GET/POST/PUT/DELETE /api/v1/menu-items`
-- Truck operator assignment CRUD: `GET/POST/PUT/DELETE /api/v1/truck-operators`
-- Flyway migrations through `V5`
-- Swagger UI: `http://localhost:8080/swagger-ui/index.html`
-- OpenAPI docs: `http://localhost:8080/v3/api-docs`
-- CORS support for browser/mobile preflight requests
-- Optional role-based write authorization for truck actions via
-  `app.authz.enforce-operator-permissions` and `X-Actor-User-Id`
+- `APP_ADMIN_USERNAME`
+- `APP_ADMIN_PASSWORD`
+- `APP_ADMIN_EMAIL`
 
-## Implemented UI Functionality
+## Core API Surface
 
-- `apps/customer-mobile`
-  - Map-first customer home
-  - Live location and reverse geocoding
-  - Customer CRUD UI with success/failure notifications, list refresh, and
-    field reset on create
-- `apps/operator-mobile`
-  - Truck profile CRUD UI
-  - Truck operator assignment CRUD UI
-  - Optional actor header input (`X-Actor-User-Id`) for authz checks
+- Auth:
+  - `POST /api/v1/auth/customer/signup`
+  - `POST /api/v1/auth/customer/signin`
+  - `POST /api/v1/auth/operator/signup`
+  - `POST /api/v1/auth/operator/signin`
+  - `POST /api/v1/auth/admin/signin`
+- Public:
+  - `GET /api/v1/public/trucks/nearby`
+  - `GET /api/v1/public/trucks/{truckId}/menu`
+- Customer:
+  - `GET /api/v1/customer/profile`
+  - `PUT /api/v1/customer/profile`
+- Operator:
+  - `GET /api/v1/operator/profile`
+  - `PUT /api/v1/operator/profile`
+  - `GET /api/v1/operator/truck`
+  - `PUT /api/v1/operator/truck`
+  - `GET /api/v1/operator/truck/location`
+  - `PUT /api/v1/operator/truck/location`
+- Admin:
+  - `GET /api/v1/admin/customers`
+  - `PUT /api/v1/admin/customers/{userId}`
+  - `PATCH /api/v1/admin/customers/{userId}/activate`
+  - `PATCH /api/v1/admin/customers/{userId}/deactivate`
+  - `GET /api/v1/admin/trucks`
+  - `POST /api/v1/admin/trucks`
+  - `PUT /api/v1/admin/trucks/{truckId}`
+  - `PATCH /api/v1/admin/trucks/{truckId}/activate`
+  - `PATCH /api/v1/admin/trucks/{truckId}/deactivate`
 
-## Database Model Implemented
+## Tests
 
-- `app_user`
-- `customer_profile`
-- `truck_owner_profile`
-- `truck_profile`
-- `truck_location`
-- `menu_item`
-- `truck_operator_assignment`
+Manual coverage checklist: `docs/test-cases.md`.
 
-## Common Issues
+## UI Notes
 
-### Port 8081 already in use
-
-Another Expo instance is already running. Stop the old process or free the
-port:
-
-```bash
-lsof -nP -iTCP:8081 -sTCP:LISTEN
-kill <pid>
-```
-
-### Expo fails under Node 22
-
-Use Node 20:
-
-```bash
-export PATH="/opt/homebrew/opt/node@20/bin:$PATH"
-node -v
-```
-
-### iOS Simulator opens but no device is available
-
-Install an iOS runtime and create a simulator device from Xcode.
-
-### Simulator location looks wrong
-
-Set the Simulator location manually:
-
-- `Features` -> `Location` -> `Custom Location...`
-
-### Web works but native map behavior differs
-
-The customer app uses a Google native map on iOS and Android. The web build
-renders a non-native fallback instead of the full native map implementation.
-
-## Current App Status
-
-- `apps/api`: running Spring Boot API with Flyway-managed PostgreSQL schema and
-  customer/truck domain CRUD endpoints
-- `apps/customer-mobile`: working Expo app with live location, Google Maps on
-  native, and customer CRUD UI
-- `apps/operator-mobile`: working Expo app with truck and operator assignment
-  CRUD UI
+- Customer Home shows current location above the map.
+- Customer and Operator apps include a profile menu and explicit `Back to Home`.
+- Operator app returns a clean empty state when no truck is assigned (no hard 404 UI failure).
