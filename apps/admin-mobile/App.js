@@ -196,10 +196,14 @@ export default function App() {
   }
 
   async function saveTruck() {
-    if (!truckForm.ownerUserId || !truckForm.truckName) {
+    const ownerUserId = truckForm.ownerUserId.trim();
+    const truckName = truckForm.truckName.trim();
+
+    if (!ownerUserId || !truckName) {
       notify("error", "This field is required.");
       return;
     }
+
     try {
       const method = selectedTruckId ? "PUT" : "POST";
       const url = selectedTruckId
@@ -212,15 +216,15 @@ export default function App() {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          ownerUserId: truckForm.ownerUserId,
-          truckName: truckForm.truckName,
+          ownerUserId,
+          truckName,
           cuisineCategories: truckForm.cuisineCategories
             .split("|")
             .map((value) => value.trim())
             .filter(Boolean),
-          description: truckForm.description,
-          phoneNumber: truckForm.phoneNumber,
-          licenseNumber: truckForm.licenseNumber,
+          description: truckForm.description.trim(),
+          phoneNumber: truckForm.phoneNumber.trim(),
+          licenseNumber: truckForm.licenseNumber.trim(),
           isOnline: truckForm.isOnline,
           isActive: truckForm.isActive
         })
@@ -229,8 +233,8 @@ export default function App() {
       setSelectedTruckId(null);
       setTruckForm(truckDefaults);
       await loadTrucks();
-    } catch {
-      notify("error", "Unable to save truck changes.");
+    } catch (error) {
+      notify("error", error.message || "Unable to save truck changes.");
     }
   }
 
@@ -341,7 +345,8 @@ export default function App() {
             </Pressable>
           </View>
         ))}
-        <TextInput style={styles.input} placeholder="Owner User Id" value={truckForm.ownerUserId} onChangeText={(value) => setTruckForm((prev) => ({ ...prev, ownerUserId: value }))} />
+        <TextInput style={styles.input} placeholder="Owner Username or User Id" value={truckForm.ownerUserId} onChangeText={(value) => setTruckForm((prev) => ({ ...prev, ownerUserId: value }))} autoCapitalize="none" />
+        <Text style={styles.meta}>Enter the owner username. UUID still works too if you already have it.</Text>
         <TextInput style={styles.input} placeholder="Truck Name" value={truckForm.truckName} onChangeText={(value) => setTruckForm((prev) => ({ ...prev, truckName: value }))} />
         <TextInput style={styles.input} placeholder="Cuisines (pipe-separated)" value={truckForm.cuisineCategories} onChangeText={(value) => setTruckForm((prev) => ({ ...prev, cuisineCategories: value }))} />
         <TextInput style={styles.input} placeholder="Description" value={truckForm.description} onChangeText={(value) => setTruckForm((prev) => ({ ...prev, description: value }))} />

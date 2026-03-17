@@ -163,17 +163,46 @@ Recent migration additions:
 ## Prerequisites
 
 - Docker Desktop + `docker compose`
-- Java 21
-- Gradle 8+
-- Node.js 20
-- Xcode Simulator / Android SDK (for native mobile runs)
+- Optional for non-Docker local run:
+  - Java 21
+  - Gradle 8+
+  - Node.js 20
+  - Xcode Simulator / Android SDK (for native mobile runs)
 
-## Start Services
+## Run Everything In Docker (Recommended)
 
-1. Start PostgreSQL:
+1. Create local env file:
 
 ```bash
-docker compose up -d
+cp .env.example .env
+```
+
+2. Build and start all services:
+
+```bash
+docker compose up -d --build
+```
+
+3. Stop all services:
+
+```bash
+docker compose down
+```
+
+This starts:
+
+- PostgreSQL (`foodtruck-postgres`)
+- API (`foodtruck-api`)
+- Customer web app (`foodtruck-customer-web`)
+- Operator web app (`foodtruck-operator-web`)
+- Admin web app (`foodtruck-admin-web`)
+
+## Manual Run (Without Docker For UI/API)
+
+1. Start PostgreSQL with Docker:
+
+```bash
+docker compose up -d postgres
 ```
 
 2. Start API:

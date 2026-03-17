@@ -50,7 +50,10 @@ public class TruckProfileController {
         @Valid @RequestBody TruckProfileRequest request,
         @RequestHeader(value = "X-Actor-User-Id", required = false) UUID actorUserId
     ) {
-        truckAuthorizationService.authorizeOwnerCreate(request.ownerUserId(), actorUserId);
+        truckAuthorizationService.authorizeOwnerCreate(
+            truckProfileService.resolveOwnerUserId(request.ownerUserId()),
+            actorUserId
+        );
         TruckProfileResponse created = truckProfileService.create(request);
         return ResponseEntity.created(URI.create("/api/v1/trucks/" + created.id())).body(created);
     }

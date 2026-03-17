@@ -1,6 +1,7 @@
 package com.foodtruck.modules.truck.service;
 
 import com.foodtruck.common.error.ResourceNotFoundException;
+import com.foodtruck.modules.customer.repository.AppUserRepository;
 import com.foodtruck.modules.truck.api.dto.TruckProfileRequest;
 import com.foodtruck.modules.truck.api.dto.TruckProfileResponse;
 import com.foodtruck.modules.truck.domain.TruckProfile;
@@ -15,9 +16,14 @@ import org.springframework.stereotype.Service;
 public class TruckProfileService {
 
     private final TruckProfileRepository truckProfileRepository;
+    private final AppUserRepository appUserRepository;
 
-    public TruckProfileService(TruckProfileRepository truckProfileRepository) {
+    public TruckProfileService(
+        TruckProfileRepository truckProfileRepository,
+        AppUserRepository appUserRepository
+    ) {
         this.truckProfileRepository = truckProfileRepository;
+        this.appUserRepository = appUserRepository;
     }
 
     public List<TruckProfileResponse> listAll() {
@@ -52,7 +58,7 @@ public class TruckProfileService {
     }
 
     private void apply(TruckProfile truckProfile, TruckProfileRequest request) {
-        truckProfile.setOwnerUserId(request.ownerUserId());
+        truckProfile.setOwnerUserId(resolveOwnerUserId(request.ownerUserId()));
         truckProfile.setTruckName(request.truckName().trim());
         truckProfile.setCuisineCategories(request.cuisineCategories() == null
             ? null
@@ -70,6 +76,22 @@ public class TruckProfileService {
         truckProfile.setIsVerified(request.isVerified() != null ? request.isVerified() : false);
         truckProfile.setIsOnline(request.isOnline() != null ? request.isOnline() : false);
         truckProfile.setIsActive(request.isActive() != null ? request.isActive() : true);
+    }
+
+    public UUID resolveOwnerUserId(String ownerUserId) {
+        String normalized = ownerUserId == null ? "" : ownerUserId.trim();
+
+        if (normalized.isBlank()) {
+            throw new ResourceNotFoundException("Owner user id is required");
+        }
+
+        try {
+            return UUID.fromString(normalized);
+        } catch (IllegalArgumentException ignored) {
+            return appUserRepository.findByUsernameIgnoreCase(normalized)
+                .map(user -> user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Owner user not found: " + normalized));
+        }
     }
 
     private TruckProfileResponse toResponse(TruckProfile truckProfile) {

@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16
@@ -18,7 +16,83 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - foodtruck-net
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: foodtruck-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-foodtruck}
+      DB_USER: ${POSTGRES_USER:-foodtruck}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-foodtruck}
+      APP_CORS_ALLOWED_ORIGIN_PATTERNS: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:8081,http://localhost:8082,http://localhost:8083}
+      APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-Admin1234}
+      APP_ADMIN_EMAIL: ${APP_ADMIN_EMAIL:-admin@foodtruck.local}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    networks:
+      - foodtruck-net
+
+  customer-web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP_DIR: apps/customer-mobile
+        EXPO_PUBLIC_API_URL: ${CUSTOMER_API_URL:-http://localhost:8080}
+    container_name: foodtruck-customer-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${CUSTOMER_WEB_PORT:-8081}:80"
+    networks:
+      - foodtruck-net
+
+  operator-web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP_DIR: apps/operator-mobile
+        EXPO_PUBLIC_API_URL: ${OPERATOR_API_URL:-http://localhost:8080}
+    container_name: foodtruck-operator-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${OPERATOR_WEB_PORT:-8082}:80"
+    networks:
+      - foodtruck-net
+
+  admin-web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+      args:
+        APP_DIR: apps/admin-mobile
+        EXPO_PUBLIC_API_URL: ${ADMIN_API_URL:-http://localhost:8080}
+    container_name: foodtruck-admin-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${ADMIN_WEB_PORT:-8083}:80"
+    networks:
+      - foodtruck-net
 
 volumes:
   postgres-data:
 
+networks:
+  foodtruck-net:
